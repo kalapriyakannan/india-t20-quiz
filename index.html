@@ -27,7 +27,7 @@ th{background:var(--bg);cursor:pointer}th::after{content:" ↕";color:var(--mut)
 <button role="tab" aria-selected="false" data-t="res">🏁 Results &amp; Answers</button></nav>
 
 <section id="q"><div class="card"><button class="btn p" id="st">▶ Start the clock</button> &nbsp;⏱ <b id="tm">0.0 s</b> &nbsp;·&nbsp; <b>Answered: <span id="sc">0</span> / <span id="tot"></span></b><div class="bar"><i id="pb"></i></div>
-<p class="mut" style="margin:8px 0 0">Press Start to begin; the clock runs until you submit. Pick one option per question. Use the hints and the jump buttons to find the evidence. Answers are revealed only at the end, in the Results &amp; Answers tab.</p></div>
+<p class="mut" style="margin:8px 0 0">Press Start to begin; the clock stops automatically once all 10 questions are answered. Pick one option per question. Use the hints and the jump buttons to find the evidence. Answers are revealed only at the end, in the Results &amp; Answers tab.</p></div>
 <div id="qs"></div>
 <div class="card"><button class="btn p" id="sub">Submit all answers</button> <span id="sm" class="mut"></span></div></section>
 
@@ -80,7 +80,7 @@ const Q=[
 {tab:"graph",q:"Which Indian bowler dismissed the most South African batters?",o:["Jasprit Bumrah","Arshdeep Singh","Hardik Pandya","Axar Patel"],c:2,hint:"Switch to the Dismissals view and count arrows.",why:"Pandya took Klaasen, Miller and Rabada (3/20)."},
 {tab:"text",q:"Klaasen’s wicket was the turning point. How many runs did South Africa still need after he fell?",o:["21","26","30","16"],c:1,hint:"“The turning point” paragraph.",why:"They needed 26 from 23 balls. (21 was needed after Jansen fell.)"},
 {tab:"all",q:"Challenge (not scored): who was the real match-winner? Pick one player and argue using evidence from at least two tabs.",open:1,hint:"Think Kohli, Bumrah, Pandya, or Klaasen as the “almost” hero.",ans:"No single right answer. Strong arguments cite numbers: Kohli 76 off 59 (data) anchoring the innings; Bumrah 2/18 with economy 4.50 (data) and the wickets of Hendricks and Jansen (graph); Pandya 3/20 (graph) including the turning-point wicket of Klaasen (text)."}];
-const S=Q.filter(x=>!x.open).length;$("#tot").textContent=S;
+const S=Q.filter(x=>!x.open).length;$("#tot").textContent=Q.length;
 const names={text:"Text",data:"Datasets",graph:"Graph",all:"any tab"};
 $("#qs").innerHTML=Q.map((x,i)=>`<div class="card q" id="q${i}"><span class="tag">${x.tab==="all"?"ALL":x.tab.toUpperCase()}</span> <b>Q${i+1}.</b> ${x.q}<br>
 ${x.open?`<textarea rows="3" placeholder="Write your argument (just for you)"></textarea>`:x.o.map((t,j)=>`<label class="o"><input type="radio" name="r${i}" value="${j}"> ${t}</label>`).join("")}
@@ -90,15 +90,20 @@ let T0=0,last=0,TT={},iv;
 const f=ms=>ms<60000?(ms/1000).toFixed(1)+" s":Math.floor(ms/60000)+" min "+String(Math.round(ms%60000/1000)).padStart(2,"0")+" s";
 $("#st").onclick=()=>{T0=last=Date.now();lock(false);$("#st").disabled=true;iv=setInterval(()=>$("#tm").textContent=f(Date.now()-T0),200)};
 const answered=()=>Q.filter((x,i)=>!x.open&&document.querySelector(`input[name=r${i}]:checked`)).length;
-$("#qs").onchange=e=>{const m=(e.target.name||"").match(/^r(\d+)$/);if(m&&T0&&TT[m[1]]==null){const t=Date.now();TT[m[1]]=t-last;last=t}const n=answered();$("#sc").textContent=n;$("#pb").style.width=n/S*100+"%"};
+const OI=Q.findIndex(x=>x.open),openDone=()=>$("#qs textarea").value.trim().length>=20;
+let stopT=0;
+const progress=()=>{const n=answered()+(openDone()?1:0);$("#sc").textContent=n;$("#pb").style.width=n/Q.length*100+"%";
+if(T0&&!stopT&&n===Q.length){stopT=Date.now();clearInterval(iv);$("#tm").textContent=f(stopT-T0)+" ⏹";$("#sm").textContent="⏹ Clock stopped: all "+Q.length+" answered in "+f(stopT-T0)+". Review, then submit."}};
+$("#qs").onchange=e=>{const m=(e.target.name||"").match(/^r(\d+)$/);if(m&&T0&&!stopT&&TT[m[1]]==null){const t=Date.now();TT[m[1]]=t-last;last=t}progress()};
+$("#qs").oninput=e=>{if(e.target.tagName==="TEXTAREA"){if(T0&&!stopT&&TT[OI]==null&&openDone()){const t=Date.now();TT[OI]=t-last;last=t}progress()}};
 $("#qs").onclick=e=>{const d=e.target.dataset;if(d.h!=null)$("#f"+d.h).textContent="💡 "+Q[d.h].hint;if(d.j)show(d.j==="all"?"text":d.j)};
 let RS="";window.cp=()=>{try{navigator.clipboard.writeText(RS).then(()=>alert("Copied! Paste it to your teacher."))}catch(e){prompt("Copy this:",RS)}};
 $("#sub").onclick=()=>{if(!T0){$("#sm").textContent="Press “Start the clock” first.";return}const n=answered();if(n<S){$("#sm").textContent="Please answer all "+S+" questions first ("+(S-n)+" left).";return}
-clearInterval(iv);const total=Date.now()-T0;$("#tm").textContent=f(total);
-let sc=0,h="";Q.forEach((x,i)=>{if(x.open){h+=`<div class="card"><b>Q${i+1}.</b> ${x.q}<br><span class="mut">Sample thinking:</span> ${x.ans}</div>`;return}
+clearInterval(iv);if(!stopT){stopT=Date.now();if(TT[OI]==null)TT[OI]=0}const total=stopT-T0;$("#tm").textContent=f(total)+" ⏹";
+let sc=0,h="";Q.forEach((x,i)=>{if(x.open){h+=`<div class="card"><b>Q${i+1}.</b> ${x.q}<br><span class="mut">⏱ ${f(TT[i]||0)} · Sample thinking:</span> ${x.ans}</div>`;return}
 const v=+document.querySelector(`input[name=r${i}]:checked`).value,ok=v===x.c;if(ok)sc++;
 h+=`<div class="card q ${ok?"ok":""}">${ok?"✅":"❌"} <b>Q${i+1}.</b> ${x.q}<br>Your answer: ${x.o[v]}${ok?"":` · Correct: <b>${x.o[x.c]}</b>`}<br><span class="mut">⏱ ${f(TT[i])} · ${x.why}</span></div>`});
-const ids=Object.keys(TT).map(Number),fast=ids.reduce((a,b)=>TT[a]<=TT[b]?a:b),slow=ids.reduce((a,b)=>TT[a]>=TT[b]?a:b),avg=ids.reduce((a,b)=>a+TT[b],0)/ids.length;
+const ids=Object.keys(TT).map(Number).filter(i=>!Q[i].open),fast=ids.reduce((a,b)=>TT[a]<=TT[b]?a:b),slow=ids.reduce((a,b)=>TT[a]>=TT[b]?a:b),avg=ids.reduce((a,b)=>a+TT[b],0)/ids.length;
 let best=null;try{best=JSON.parse(localStorage.getItem("t20best"))}catch(e){}
 const better=!best||sc>best.s||(sc===best.s&&total<best.t);if(better){const old=best;best={s:sc,t:total};try{localStorage.setItem("t20best",JSON.stringify(best))}catch(e){}if(!old)best.first=1}
 const m=sc>=8?"Brilliant, a true match analyst! 🏆":sc>=5?"Solid innings. Check the misses below.":"Good effort. Revisit the sources and try again.";
